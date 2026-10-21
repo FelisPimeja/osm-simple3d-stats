@@ -104,7 +104,7 @@ limit 25
 ## Где редактируют
 
 ```sql points
-select lat, lon, "user", edits from osm.changesets where lat is not null
+select id, day, lat, lon, "user", edits from osm.changesets where lat is not null
 ```
 
-<PointMap data={points} lat=lat long=lon pointName=user value=edits height=450/>
+<ChangesetMap data={points} height=450/>
