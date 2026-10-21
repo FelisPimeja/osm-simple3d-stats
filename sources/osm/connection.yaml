@@ -1,0 +1,4 @@
+name: osm
+type: duckdb
+options:
+  filename: ':memory:'
