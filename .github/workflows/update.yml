@@ -32,10 +32,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Fetch changesets from OSMCha
+      - name: Fetch changesets (OSMCha, OHM, OGF)
         if: github.event_name != 'push'
         env:
           OSMCHA_TOKEN: ${{ secrets.OSMCHA_TOKEN }}
+          OHM_OSMCHA_TOKEN: ${{ secrets.OHM_OSMCHA_TOKEN }}
         run: npm run fetch
 
       - name: Commit data

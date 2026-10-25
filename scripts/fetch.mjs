@@ -4,7 +4,8 @@
 //   it when the upload contains objects edited in 3D). Re-fetches a few days back on every run: OSMCha
 //   processes changesets with a delay and updates review status afterwards, so recent records are
 //   overwritten by id.
-// - OpenHistoricalMap: data/ohm.jsonl, rebuilt from the daily dump of all changesets (no OSMCha there).
+// - OpenHistoricalMap: data/ohm.jsonl, from its own OSMCha (osmcha.openhistoricalmap.org, OHM_OSMCHA_TOKEN) with
+//   the same two queries; it fills no tag changes. Without the token — rebuilt from the daily changeset dump.
 // - OpenGeofiction: data/ogf.jsonl, incrementally from the API (/changesets by time window; no dumps).
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -23,13 +24,13 @@ const STATE = 'data/state.json';
 const SCHEMA = 2;
 const UA = { 'User-Agent': 'osm-simple3d-stats (github.com/felispimeja/osm-simple3d-stats)' };
 
-function token() {
-  if (process.env.OSMCHA_TOKEN) return process.env.OSMCHA_TOKEN.trim();
+function token(name, required = true) {
+  if (process.env[name]) return process.env[name].trim();
   if (existsSync('.env.local')) {
-    const m = readFileSync('.env.local', 'utf8').match(/^OSMCHA_TOKEN=(.+)$/m);
+    const m = readFileSync('.env.local', 'utf8').match(new RegExp(`^${name}=(.+)$`, 'm'));
     if (m) return m[1].trim();
   }
-  throw new Error('OSMCHA_TOKEN is not set (env or .env.local)');
+  if (required) throw new Error(`${name} is not set (env or .env.local)`);
 }
 
 async function get(url, headers = {}) {
@@ -91,11 +92,9 @@ const fresh = state.schema !== SCHEMA;
 
 // --- OpenStreetMap (OSMCha) ---
 
-const auth = token();
-
-async function osmcha(query, keep) {
+async function osmcha(host, auth, query, keep) {
   const out = [];
-  let url = `https://osmcha.org/api/v1/changesets/?${query}&page_size=${PAGE_SIZE}`;
+  let url = `https://${host}/api/v1/changesets/?${query}&page_size=${PAGE_SIZE}`;
   while (url) {
     const page = await get(url, { Authorization: `Token ${auth}` });
     out.push(...page.features.filter(keep).map(toRecord));
@@ -105,15 +104,21 @@ async function osmcha(query, keep) {
   return out;
 }
 
+/** Changesets of the editor itself and JOSM changesets with hashtags=#simple3d. */
+async function ours3d(name, host, auth, since) {
+  console.log(`${name}: ${EDITOR} changesets since ${since}`);
+  const out = await osmcha(host, auth, `editor=${EDITOR}&date__gte=${since}`, (f) => f.properties.editor === EDITOR);
+  // The metadata filter is an exact match: JOSM changesets that have other hashtags besides #simple3d are missed
+  console.log(`${name}: JOSM changesets with hashtags=${HASHTAG} since ${since}`);
+  out.push(...await osmcha(host, auth,
+    `editor=JOSM&date__gte=${since}&metadata=${encodeURIComponent(`hashtags=${HASHTAG}`)}`,
+    (f) => !f.properties.editor.startsWith(EDITOR) && hasHashtag(f.properties.metadata?.hashtags),
+  ));
+  return out;
+}
+
 const since = !fresh && state.last_date ? daysBefore(state.last_date, OVERLAP_DAYS) : START;
-console.log(`OSM: ${EDITOR} changesets since ${since}`);
-const fetched = await osmcha(`editor=${EDITOR}&date__gte=${since}`, (f) => f.properties.editor === EDITOR);
-// The metadata filter is an exact match: JOSM changesets that have other hashtags besides #simple3d are missed
-console.log(`OSM: JOSM changesets with hashtags=${HASHTAG} since ${since}`);
-fetched.push(...await osmcha(
-  `editor=JOSM&date__gte=${since}&metadata=${encodeURIComponent(`hashtags=${HASHTAG}`)}`,
-  (f) => !f.properties.editor.startsWith(EDITOR) && hasHashtag(f.properties.metadata?.hashtags),
-));
+const fetched = await ours3d('OSM', 'osmcha.org', token('OSMCHA_TOKEN'), since);
 
 const byMonth = new Map();
 for (const r of fetched) {
@@ -161,8 +166,8 @@ function plainRecord(c, tags) {
   };
 }
 
-/** OHM: the daily dump of all changesets (~11 MB bz2), streamed through bzcat. */
-async function ohm() {
+/** OHM without OSMCha: the daily dump of all changesets (~11 MB bz2), streamed through bzcat. */
+async function ohmDump() {
   const base = 'https://planet.openhistoricalmap.org/planet/changesets/';
   const xml = await fetch('https://s3.amazonaws.com/planet.openhistoricalmap.org?list-type=2&prefix=planet/changesets/changesets-&start-after=planet/changesets/changesets-' + daysBefore(new Date().toISOString(), 7).slice(2).replaceAll('-', ''), { headers: UA }).then((r) => r.text());
   const name = [...xml.matchAll(/changesets-\d+_\d+\.osm\.bz2/g)].map((m) => m[0]).sort().at(-1);
@@ -213,9 +218,22 @@ async function ogf(since) {
   return out;
 }
 
-const other = { ogf_last_date: state.ogf_last_date };
+const other = { ogf_last_date: state.ogf_last_date, ohm_last_date: state.ohm_last_date };
 try {
-  const rows = await ohm();
+  const ohmAuth = token('OHM_OSMCHA_TOKEN', false);
+  let rows;
+  if (ohmAuth) {
+    // Records from the dump (no "create" field) are replaced by OSMCha ones on the first run
+    const ohmFresh = fresh || !state.ohm_last_date;
+    const ohmSince = !ohmFresh ? daysBefore(state.ohm_last_date, OVERLAP_DAYS) : START_OTHER;
+    const merged = new Map(ohmFresh ? [] : readJsonl('data/ohm.jsonl').map((r) => [r.id, r]));
+    for (const r of await ours3d('OHM', 'osmcha.openhistoricalmap.org', ohmAuth, ohmSince)) merged.set(r.id, r);
+    rows = [...merged.values()].sort((a, b) => a.id - b.id);
+    other.ohm_last_date = rows.reduce((m, r) => (r.date > m ? r.date : m), state.ohm_last_date ?? START_OTHER);
+  } else {
+    rows = await ohmDump();
+    delete other.ohm_last_date;
+  }
   writeJsonl('data/ohm.jsonl', rows);
   console.log(`  data/ohm.jsonl: ${rows.length}`);
 } catch (e) {

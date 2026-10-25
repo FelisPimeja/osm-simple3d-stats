@@ -2,7 +2,7 @@
 title: OpenHistoricalMap и OpenGeofiction
 ---
 
-Чейнджсеты osm-simple3d-editor (и JOSM с `#simple3d`) в [OpenHistoricalMap](https://www.openhistoricalmap.org) и [OpenGeofiction](https://opengeofiction.net), с 10.10.2026 — с появления в редакторе этих серверов. OSMCha для них нет, поэтому данные проще: OHM — из [ежедневного дампа чейнджсетов](https://planet.openhistoricalmap.org/?prefix=planet/changesets/), OGF — из API (`/changesets` по времени). Изменённых тегов нет — только число правок. Текущие сутки UTC не показываются.
+Чейнджсеты osm-simple3d-editor (и JOSM с `#simple3d`) в [OpenHistoricalMap](https://www.openhistoricalmap.org) и [OpenGeofiction](https://opengeofiction.net), с 10.10.2026 — с появления в редакторе этих серверов. OHM — из [OSMCha OpenHistoricalMap](https://osmcha.openhistoricalmap.org), OGF — из API (`/changesets` по времени): своего OSMCha у OGF нет. Изменённых тегов нет ни там, ни там — только число правок. Текущие сутки UTC не показываются.
 
 ```sql totals
 select

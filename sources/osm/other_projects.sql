@@ -10,7 +10,7 @@ select
   comment,
   source,
   imagery_used,
-  changes,
+  coalesce(changes, "create" + "modify" + "delete") as changes,
   (bbox[1] + bbox[3]) / 2 as lon,
   (bbox[2] + bbox[4]) / 2 as lat
 from (
