@@ -7,3 +7,4 @@ select
   array_to_string(t.v, ' | ') as "values"
 from read_json('data/changesets/*.jsonl', format = 'newline_delimited', union_by_name = true),
   unnest(tags) as u(t)
+where cast(cast(date as timestamp) as date) < current_date
