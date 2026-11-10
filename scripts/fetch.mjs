@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { writeCountries } from './countries.mjs';
 
 const EDITOR = 'osm-simple3d-editor';
 const HASHTAG = '#simple3d';
@@ -136,6 +137,7 @@ for (const [month, records] of byMonth) {
 }
 
 const all = readdirSync(DIR).filter((f) => f.endsWith('.jsonl')).flatMap((f) => readJsonl(`${DIR}/${f}`));
+writeCountries();
 const lastDate = all.reduce((m, r) => (r.date > m ? r.date : m), state.last_date ?? START);
 
 // --- OpenHistoricalMap / OpenGeofiction: changeset metadata only (no tag changes) ---

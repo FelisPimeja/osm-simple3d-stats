@@ -6,6 +6,8 @@ Usage dashboard for osm-simple3d-editor built with [Evidence](https://evidence.d
 
 - `scripts/fetch.mjs` pulls changesets with `created_by=osm-simple3d-editor`, plus JOSM changesets with `hashtags=#simple3d` (added by the JOSM plugin), from the OSMCha API and appends them to `data/changesets/YYYY-MM.jsonl` (one changeset per line). Each run re-fetches the last 3 days and overwrites records by id. `data/state.json` stores the last processed date; bumping `SCHEMA` in the script re-fetches everything.
 - OpenHistoricalMap: `data/ohm.jsonl` comes from osmcha.openhistoricalmap.org (`OHM_OSMCHA_TOKEN`, no tag changes there); without the token it is rebuilt from the daily changeset dump at planet.openhistoricalmap.org (needs `bzcat`). OpenGeofiction: `data/ogf.jsonl` is filled incrementally from the OGF API (`/changesets` by time window).
+- Country: `scripts/countries.mjs` (run at the end of fetch) writes `data/countries.jsonl` — the country of each OSM changeset by its bbox centre, using `data/countries.geojson` (Natural Earth 1:50m admin 0, public domain, reduced to ISO code + Russian name).
+- Simple 3D / Simple Indoor split (`kind`, `has_indoor`, `has_3d` in `sources/osm/changesets.sql`): Indoor by the editor's "Indoor plans:" comment section or indoor keys, 3D by building/roof shape keys.
 - The current UTC day is filtered out in `sources/osm/*.sql`: it is incomplete.
 - `sources/osm/*.sql` read the JSONL with DuckDB (`read_json('data/changesets/*.jsonl')`) and become the `osm.*` tables used by `pages/*.md`.
 - `.github/workflows/update.yml` runs daily (and on demand): fetch → commit data → build → deploy to Pages. The daily commit of `data/state.json` keeps the scheduled workflow from being disabled for inactivity.
